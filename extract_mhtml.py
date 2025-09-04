@@ -13,6 +13,14 @@ except ImportError:
     from bs4 import BeautifulSoup
 
 
+def sanitize_filename(filename: str) -> str:
+    """Elimina caracteres no permitidos en nombres de archivo de Windows"""
+    invalid_chars = r'<>:"/\\|?*'
+    for c in invalid_chars:
+        filename = filename.replace(c, "_")
+    return filename
+
+
 def beautify_html(content: bytes) -> str:
     """Formatea el HTML para hacerlo legible con indentación y saltos de línea ✨"""
     try:
@@ -49,6 +57,9 @@ def extract_mhtml(mhtml_file):
         filename = re.sub(r"^cid:", "", filename)  # quitar "cid:"
         filename = filename.replace(":", "_")      # Windows no permite ":"
         filename = filename.replace("/", "_")
+
+        # 👉 Sanear caracteres prohibidos en Windows
+        filename = sanitize_filename(filename)
 
         # Obtener extensión según el tipo MIME
         ext = mimetypes.guess_extension(content_type)
