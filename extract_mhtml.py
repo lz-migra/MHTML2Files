@@ -1,101 +1,98 @@
-import email
-from pathlib import Path
-import sys
+import os
 import re
+import sys
+import mimetypes
+import subprocess
 
-# Mapear Content-Type → extensión
-MIME_EXTENSIONS = {
-    "text/html": ".html",
-    "text/css": ".css",
-    "application/javascript": ".js",
-    "application/x-javascript": ".js",
-    "image/png": ".png",
-    "image/jpeg": ".jpg",
-    "image/gif": ".gif",
-    "image/svg+xml": ".svg",
-    "font/woff": ".woff",
-    "font/woff2": ".woff2",
-    "application/font-woff": ".woff",
-}
+# 👉 Intentar importar BeautifulSoup, instalar si no existe
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    print("📦 BeautifulSoup no encontrado. Instalando automáticamente...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "beautifulsoup4"])
+    from bs4 import BeautifulSoup
 
-def sanitize_filename(name: str, content_type: str, index: int) -> str:
-    # Quitar "cid:" y "@mhtml.blink"
-    if name.startswith("cid:"):
-        name = name[4:]
-    name = name.replace("@mhtml.blink", "")
 
-    # Reemplazar caracteres inválidos
-    name = re.sub(r'[<>:"/\\|?*]', "_", name)
+def beautify_html(content: bytes) -> str:
+    """Formatea el HTML para hacerlo legible con indentación y saltos de línea ✨"""
+    try:
+        soup = BeautifulSoup(content, "html.parser")
+        return soup.prettify()
+    except Exception as e:
+        print(f"⚠️ Error al formatear HTML: {e}")
+        return content.decode("utf-8", errors="ignore")
 
-    # Forzar extensión correcta según Content-Type
-    ext = MIME_EXTENSIONS.get(content_type)
-    if ext and not name.endswith(ext):
-        name = f"{name}{ext}"
 
-    # Si no queda nada válido, inventar uno
-    if not name.strip():
-        name = f"recurso_{index}{ext or ''}"
+def extract_mhtml(mhtml_file):
+    from email import message_from_binary_file
 
-    return name.strip()
-
-def extract_mhtml(mhtml_path, output_dir=None):
-    mhtml_file = Path(mhtml_path)
-
-    if not mhtml_file.exists():
-        print(f"❌ No se encontró el archivo: {mhtml_file}")
-        return
-
-    if not output_dir:
-        output_dir = mhtml_file.parent / (mhtml_file.stem + "_extraido")
-
-    output_dir.mkdir(parents=True, exist_ok=True)
+    base_dir = os.path.splitext(mhtml_file)[0]
+    os.makedirs(base_dir, exist_ok=True)
 
     with open(mhtml_file, "rb") as f:
-        msg = email.message_from_binary_file(f)
+        msg = message_from_binary_file(f)
 
-    mapping = {}  # content-location → nuevo nombre
-    count = 0
+    resources = {}
+    html_file = None
 
-    for i, part in enumerate(msg.walk()):
+    for part in msg.walk():
+        content_id = part.get("Content-ID", "")
+        content_location = part.get("Content-Location", "")
+        content_type = part.get_content_type()
         payload = part.get_payload(decode=True)
+
         if not payload:
             continue
 
-        content_type = part.get_content_type()
-        content_location = part.get("Content-Location")
+        # Determinar nombre base
+        filename = content_location or content_id
+        filename = re.sub(r"^cid:", "", filename)  # quitar "cid:"
+        filename = filename.replace(":", "_")      # Windows no permite ":"
+        filename = filename.replace("/", "_")
 
-        filename = None
-        if content_location:
-            filename = Path(content_location).name
+        # Obtener extensión según el tipo MIME
+        ext = mimetypes.guess_extension(content_type)
+        if not ext and "." in filename:
+            ext = os.path.splitext(filename)[1]
+        if not ext:
+            ext = ".bin"
+
+        if not filename.endswith(ext):
+            filename += ext
+
+        file_path = os.path.join(base_dir, filename)
+
+        # Guardar HTML formateado
+        if content_type == "text/html":
+            html_file = file_path
+            pretty_html = beautify_html(payload)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(pretty_html)
         else:
-            filename = part.get_filename()
+            with open(file_path, "wb") as f:
+                f.write(payload)
 
-        filename = sanitize_filename(filename or "", content_type, i)
+        resources[content_id] = filename
+        resources[content_location] = filename
 
-        out_path = output_dir / filename
-        with open(out_path, "wb") as out_file:
-            out_file.write(payload)
+    # Reemplazar rutas en el HTML
+    if html_file:
+        with open(html_file, "r", encoding="utf-8") as f:
+            html_content = f.read()
 
-        if content_location:
-            mapping[content_location] = filename
+        for key, value in resources.items():
+            if key:
+                html_content = html_content.replace(key, value)
 
-        count += 1
-        print(f"✅ Extraído: {out_path}")
+        with open(html_file, "w", encoding="utf-8") as f:
+            f.write(html_content)
 
-    # 🔄 Corregir rutas en archivos HTML
-    for html_file in output_dir.glob("*.html"):
-        text = html_file.read_text(encoding="utf-8", errors="ignore")
-        for old, new in mapping.items():
-            if old in text:
-                text = text.replace(old, new)
-        html_file.write_text(text, encoding="utf-8")
-        print(f"🔗 Rutas corregidas en: {html_file}")
-
-    print(f"\n🎉 Listo, se extrajeron {count} recursos en: {output_dir}")
+    print(f"✅ Archivos extraídos en: {base_dir}")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Uso: python extract_mhtml.py archivo.mhtml [carpeta_salida]")
-    else:
-        extract_mhtml(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None)
+    if len(sys.argv) != 2:
+        print("Uso: python extract_mhtml.py archivo.mhtml")
+        sys.exit(1)
+
+    extract_mhtml(sys.argv[1])
