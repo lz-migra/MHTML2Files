@@ -1,6 +1,6 @@
 # MHTML2Files (Extractor de Snapshots MHTML)
 
-**MHTML2Files** es una herramienta práctica, ligera y potente que simplifica el proceso de **extraer y organizar todos los recursos (HTML, CSS, JS, imágenes, fuentes, etc.) contenidos en un archivo `.mhtml`**. Ideal para desarrolladores web, archivistas digitales o cualquier persona que quiera inspeccionar y reutilizar páginas web guardadas en formato MHTML.
+**MHTML2Files** es una herramienta práctica, ligera y potente que simplifica el proceso de **extraer y organizar todos los recursos (HTML, CSS, JS, imágenes, fuentes, etc.) contenidos en un archivo `.mhtml` y obtener asi un recurso editablede este o html comun**. Ideal para desarrolladores web, archivistas digitales o cualquier persona que quiera inspeccionar y reutilizar páginas web guardadas en formato MHTML.
 
 Este proyecto surge para resolver un problema común: los navegadores guardan las páginas en `.mhtml` como un único archivo, y acceder a los recursos internos (que aparecen como `@mhtml.blink`) de forma manual es tedioso. Con **MHTML2Files**, todo se desempaqueta automáticamente en carpetas listas para usar.
 
