@@ -24,7 +24,7 @@ if (-not $isPythonInstalled) {
     Write-Host "No se encontro una instalacion real de Python. Se procedera a la descarga." -ForegroundColor Yellow
 
     # URL del instalador oficial de Python para Windows 64-bit
-    $pythonInstallerUrl = "https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe"
+    $pythonInstallerUrl = "https://www.python.org/ftp/python/3.13.7/python-3.13.7-amd64.exe"
     $pythonInstallerPath = "$env:TEMP\python_installer.exe"
 
     Write-Host "Descargando instalador de Python..."
