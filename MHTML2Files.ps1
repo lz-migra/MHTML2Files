@@ -2,11 +2,26 @@
 # 1. VERIFICACIÓN E INSTALACIÓN DE PYTHON
 # ===================================================================
 Add-Type -AssemblyName System.Windows.Forms
-Write-Host "🔍 Verificando si Python está instalado..."
+Write-Host "🔍 Verificando instalación real de Python..."
 
-# Comprueba si el comando 'python' está disponible
-if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    Write-Host "❌ Python no encontrado. Se procederá a la descarga e instalación." -ForegroundColor Yellow
+# Variable para rastrear si Python está realmente instalado
+$isPythonInstalled = $false
+
+# Busca cualquier comando 'python' disponible en el sistema
+$pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+
+if ($pythonCommand) {
+    # Si encuentra un comando, verifica su ruta de origen.
+    # Los stubs de la Microsoft Store están en una carpeta que contiene "\Microsoft\WindowsApps\".
+    # Si la ruta NO contiene esa carpeta, entonces es una instalación real.
+    if ($pythonCommand.Source -notlike "*\Microsoft\WindowsApps\*") {
+        $isPythonInstalled = $true
+    }
+}
+
+# Procede a la instalación solo si la verificación falló
+if (-not $isPythonInstalled) {
+    Write-Host "❌ No se encontró una instalación real de Python. Se procederá a la descarga." -ForegroundColor Yellow
 
     # URL del instalador oficial de Python para Windows 64-bit
     $pythonInstallerUrl = "https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe"
@@ -30,7 +45,7 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     
     Write-Host "PATH actualizado para la sesión actual."
 } else {
-    Write-Host "✅ Python ya está instalado." -ForegroundColor Green
+    Write-Host "✅ Se encontró una instalación real de Python." -ForegroundColor Green
 }
 
 
