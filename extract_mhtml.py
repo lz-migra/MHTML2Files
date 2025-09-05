@@ -113,11 +113,11 @@ def generate_variants(key: str):
     variants.add(basename)
     # con y sin cid:
     if no_br.lower().startswith("cid:"):
-        variants.add(no_br)                # cid:abc...
-        variants.add(no_br[4:])            # abc...
+        variants.add(no_br)              # cid:abc...
+        variants.add(no_br[4:])           # abc...
     else:
-        variants.add("cid:" + no_br)       # cid:abc...
-        variants.add("cid:" + basename)    # cid:basename
+        variants.add("cid:" + no_br)      # cid:abc...
+        variants.add("cid:" + basename)   # cid:basename
     # con y sin @mhtml.blink
     if "@mhtml.blink" in no_br:
         variants.add(no_br)
@@ -130,7 +130,7 @@ def generate_variants(key: str):
     # percent-decoded simples (%40 -> @, %3A -> :)
     variants.add(no_br.replace("%40", "@").replace("%3A", ":"))
     # limpiar espacios
-    cleaned = set(v.strip() for v in variants if v and len(v.strip())>0)
+    cleaned = set(v.strip() for v in variants if v and len(v.strip()) > 0)
     return cleaned
 
 def beautify_html_text(html_text: str) -> str:
@@ -170,8 +170,8 @@ def extract_mhtml(mhtml_path):
         })
 
     # 1) Crear nombres de archivo y mapa de variantes -> filename
-    variant_map = {}   # variant_string -> filename
-    entries = []       # lista de items con info para escribir
+    variant_map = {}  # variant_string -> filename
+    entries = []      # lista de items con info para escribir
     for item in parts:
         idx = item["index"]
         ct = item["content_type"]
@@ -181,20 +181,24 @@ def extract_mhtml(mhtml_path):
         # Nombre base preferido: content_location > content_id > recurso_idx
         raw_name = cloc or cid or f"resource_{idx}"
         raw_name = str(raw_name)
-        # quitar "cid:" si tiene, quitar <>
+        
+        # --- CAMBIOS PRINCIPALES AQUÍ ---
+
+        # 1. Limpiar el nombre base para que sea el nombre de archivo final
         base_name = re.sub(r"^cid:", "", raw_name, flags=re.IGNORECASE)
         base_name = base_name.strip("<> ")
+        base_name = base_name.replace("@mhtml.blink", "") # <-- Cambio 1: Eliminar @mhtml.blink
         base_name = sanitize_filename(base_name)
 
-        # determinar extension
+        # 2. Determinar extensión y construir el nombre de forma más robusta
         ext = guess_ext(ct, base_name)
-        if not base_name.lower().endswith(ext.lower()):
-            filename = base_name + ext
-        else:
-            filename = base_name
+        name_part, _ = os.path.splitext(base_name) # <-- Cambio 2: Separar nombre y extensión...
+        filename = name_part + ext                # <-- ...para evitar duplicados como .css.css
 
-        # asegurarnos único
+        # Asegurarnos de que el nombre sea único
         filename = ensure_unique(base_dir, filename)
+        
+        # --- FIN DE CAMBIOS PRINCIPALES ---
 
         # generar variantes tanto para content_location como content_id
         keys = set()
@@ -231,7 +235,7 @@ def extract_mhtml(mhtml_path):
             # aplicar reemplazos: cada variante -> filename
             for var in variants_sorted:
                 target = variant_map[var]
-                # reemplazar exactamente la variante y también su forma con "cid:" si no la tiene
+                # reemplazar exactamente la variante
                 try:
                     html_text = html_text.replace(var, target)
                     # también reemplazar "cid:var" -> target (si aún aparece)
@@ -251,7 +255,6 @@ def extract_mhtml(mhtml_path):
             print(f"✅ Recurso guardado: {out_path}")
 
     print("\n🎉 Extracción completada en:", base_dir)
-    print("🔎 Nota: si alguna referencia sigue apuntando a 'cid:' en el HTML, dime un ejemplo exacto y lo afinamos.")
 
 # -------------------------
 # CLI
