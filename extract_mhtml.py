@@ -92,8 +92,20 @@ def extract_mhtml(mhtml_file):
             html_content = f.read()
 
         for key, value in resources.items():
-            if key:
-                html_content = html_content.replace(key, value)
+            if not key:
+                continue
+
+            # Normalizar claves que pueden aparecer en el HTML
+            patterns = [
+                key,
+                key.replace("cid:", ""),
+                "cid:" + key,
+                key.replace("@mhtml.blink", ""),
+            ]
+
+            for p in patterns:
+                if p in html_content:
+                    html_content = html_content.replace(p, value)
 
         with open(html_file, "w", encoding="utf-8") as f:
             f.write(html_content)
