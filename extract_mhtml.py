@@ -50,15 +50,11 @@ def sanitize_filename(name: str) -> str:
     if not name:
         return ""
     name = name.strip()
-    # Eliminar “cid:” si existe (lo guardaremos en variantes)
     name = re.sub(r"^cid:", "", name, flags=re.IGNORECASE)
-    # Quitar <> envolventes
     name = name.strip("<>")
-    # Reemplazar caracteres no válidos
     invalid_chars = r'<>:"/\\|?*'
     for c in invalid_chars:
         name = name.replace(c, "_")
-    # Evitar nombres vacíos
     return name or "resource"
 
 def ensure_unique(path_dir: str, filename: str) -> str:
@@ -99,26 +95,21 @@ def generate_variants(key: str):
     if not key:
         return variants
     k = str(key).strip()
-    # raw
     variants.add(k)
-    # sin <>
     no_br = k.strip("<>")
     variants.add(no_br)
-    # basename
     try:
         import ntpath
         basename = ntpath.basename(no_br)
     except Exception:
         basename = os.path.basename(no_br)
     variants.add(basename)
-    # con y sin cid:
     if no_br.lower().startswith("cid:"):
-        variants.add(no_br)              # cid:abc...
-        variants.add(no_br[4:])           # abc...
+        variants.add(no_br)
+        variants.add(no_br[4:])
     else:
-        variants.add("cid:" + no_br)      # cid:abc...
-        variants.add("cid:" + basename)   # cid:basename
-    # con y sin @mhtml.blink
+        variants.add("cid:" + no_br)
+        variants.add("cid:" + basename)
     if "@mhtml.blink" in no_br:
         variants.add(no_br)
         variants.add(no_br.replace("@mhtml.blink", ""))
@@ -127,9 +118,7 @@ def generate_variants(key: str):
     else:
         variants.add(no_br + "@mhtml.blink")
         variants.add(basename + "@mhtml.blink")
-    # percent-decoded simples (%40 -> @, %3A -> :)
     variants.add(no_br.replace("%40", "@").replace("%3A", ":"))
-    # limpiar espacios
     cleaned = set(v.strip() for v in variants if v and len(v.strip()) > 0)
     return cleaned
 
@@ -152,7 +141,6 @@ def extract_mhtml(mhtml_path):
     base_dir = os.path.splitext(mhtml_path)[0]
     os.makedirs(base_dir, exist_ok=True)
 
-    # Leer todas las partes primero
     parts = []
     with open(mhtml_path, "rb") as f:
         msg = message_from_binary_file(f)
@@ -169,50 +157,35 @@ def extract_mhtml(mhtml_path):
             "payload_bytes": payload,
         })
 
-    # 1) Crear nombres de archivo y mapa de variantes -> filename
-    variant_map = {}  # variant_string -> filename
-    entries = []      # lista de items con info para escribir
+    variant_map = {}
+    entries = []
     for item in parts:
         idx = item["index"]
         ct = item["content_type"]
         cid = item["content_id"]
         cloc = item["content_location"]
-
-        # Nombre base preferido: content_location > content_id > recurso_idx
         raw_name = cloc or cid or f"resource_{idx}"
         raw_name = str(raw_name)
         
-        # --- CAMBIOS PRINCIPALES AQUÍ ---
-
-        # 1. Limpiar el nombre base para que sea el nombre de archivo final
         base_name = re.sub(r"^cid:", "", raw_name, flags=re.IGNORECASE)
         base_name = base_name.strip("<> ")
-        base_name = base_name.replace("@mhtml.blink", "") # <-- Cambio 1: Eliminar @mhtml.blink
+        base_name = base_name.replace("@mhtml.blink", "")
         base_name = sanitize_filename(base_name)
 
-        # 2. Determinar extensión y construir el nombre de forma más robusta
         ext = guess_ext(ct, base_name)
-        name_part, _ = os.path.splitext(base_name) # <-- Cambio 2: Separar nombre y extensión...
-        filename = name_part + ext                # <-- ...para evitar duplicados como .css.css
-
-        # Asegurarnos de que el nombre sea único
+        name_part, _ = os.path.splitext(base_name)
+        filename = name_part + ext
         filename = ensure_unique(base_dir, filename)
-        
-        # --- FIN DE CAMBIOS PRINCIPALES ---
 
-        # generar variantes tanto para content_location como content_id
         keys = set()
         keys.update(generate_variants(cloc))
         keys.update(generate_variants(cid))
-        # además mappear la propia base_name y basename sin extensión
         keys.add(base_name)
         keys.add(os.path.basename(base_name))
-        # almacenar en map
+
         for k in keys:
-            if k:  # evitar vacíos
-                # preferir la primera aparición (no sobrescribir si existe)
-                if k not in variant_map:
-                    variant_map[k] = filename
+            if k and k not in variant_map:
+                variant_map[k] = filename
 
         entries.append({
             "filename": filename,
@@ -222,34 +195,43 @@ def extract_mhtml(mhtml_path):
             "part_obj": item["part_obj"],
         })
 
-    # 2) Escribir archivos: para HTML, primero aplicar reemplazos en texto y luego formatear
-    # ordenamos variantes por longitud descendente para evitar reemplazos parciales antes de los largos
-    variants_sorted = sorted(variant_map.keys(), key=lambda s: -len(s))
+    # 2) Escribir archivos: para HTML, aplicar reemplazos en una sola pasada con regex
+
+    # Crear un mapa de reemplazo que incluya las variantes "cid:"
+    # Esto evita tener que hacer múltiples llamadas a .replace()
+    master_replace_map = {}
+    for var, target in variant_map.items():
+        master_replace_map[var] = target
+        if not var.lower().startswith("cid:"):
+            master_replace_map["cid:" + var] = target
+
+    # Ordenar las llaves por longitud descendente para que el regex
+    # encuentre la más larga primero (ej: "img/1.png" antes que "img/1")
+    sorted_keys = sorted(master_replace_map.keys(), key=len, reverse=True)
+    
+    # Crear el patrón de regex uniendo todas las llaves con "|"
+    # re.escape() se asegura de que caracteres especiales no rompan el regex
+    pattern = re.compile('|'.join(re.escape(key) for key in sorted_keys))
+
+    # Función que será llamada por re.sub() para cada coincidencia
+    def replacer(match):
+        # Busca la cadena encontrada en nuestro mapa y devuelve el nombre de archivo final
+        return master_replace_map.get(match.group(0), match.group(0))
 
     for entry in entries:
         out_path = os.path.join(base_dir, entry["filename"])
         if entry["is_html"]:
-            # decodificar a texto con charset si está disponible
             part = entry["part_obj"]
             html_text = decode_payload_text(part)
-            # aplicar reemplazos: cada variante -> filename
-            for var in variants_sorted:
-                target = variant_map[var]
-                # reemplazar exactamente la variante
-                try:
-                    html_text = html_text.replace(var, target)
-                    # también reemplazar "cid:var" -> target (si aún aparece)
-                    if not var.lower().startswith("cid:"):
-                        html_text = html_text.replace("cid:" + var, target)
-                except Exception:
-                    pass
-            # beautify
+            
+            # Aplicar el reemplazo en una sola pasada
+            html_text = pattern.sub(replacer, html_text)
+
             pretty = beautify_html_text(html_text)
             with open(out_path, "w", encoding="utf-8") as f:
                 f.write(pretty)
             print(f"✅ HTML guardado: {out_path}")
         else:
-            # binario u otros
             with open(out_path, "wb") as f:
                 f.write(entry["payload_bytes"])
             print(f"✅ Recurso guardado: {out_path}")
