@@ -27,7 +27,7 @@ if (-not $isPythonInstalled) {
     $pythonInstallerUrl = "https://www.python.org/ftp/python/3.13.7/python-3.13.7-amd64.exe"
     $pythonInstallerPath = "$env:TEMP\python_installer.exe"
 
-    Write-Host "Descargando instalador de Python..."
+    Write-Host "Descargando instalador de Python 3.13.7 ..."
     Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $pythonInstallerPath -UseBasicParsing
     
     Write-Host "Instalando Python silenciosamente... (Esto puede tardar unos minutos)"
