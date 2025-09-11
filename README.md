@@ -75,11 +75,3 @@ Luego, vuelve a ejecutar el script.
 
 **P: ¿Cómo sé que los recursos quedaron bien enlazados?**
 **R:** Abre el HTML extraído en tu navegador. Deberías ver la página renderizada correctamente con todos sus estilos e imágenes.
-
----
-
-💡 **Tip del Autor**: Yo uso **MHTML2Files** para inspeccionar fácilmente páginas guardadas desde Chrome sin tener que lidiar con los molestos `@mhtml.blink`.
-
----
-
-👉 ¿Quieres que además te prepare un **README.md listo para GitHub** con esta descripción ya formateada en Markdown, incluyendo secciones como “Instalación rápida” y “Ejemplo de uso”?
